@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mis Entradas — Torneo Madre de Ciudades</title>
+<style>
+  :root{--fucsia:#d6006e;--fucsia-osc:#9e0052;--rosa:#fdeef6;--tinta:#2a0a1c;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,var(--rosa),#fff);min-height:100vh;color:var(--tinta);padding:24px;}
+  .wrap{max-width:540px;margin:30px auto;}
+  .top{text-align:center;margin-bottom:20px;}
+  .top h1{color:var(--fucsia);font-size:28px;}
+  .top p{color:#7a5066;font-size:14px;margin-top:4px;}
+  .card{background:#fff;border-radius:18px;box-shadow:0 14px 40px rgba(214,0,110,.12);padding:28px;}
+  label{display:block;margin:12px 0 4px;font-weight:600;font-size:14px;}
+  input{width:100%;padding:12px;border:1px solid #f3d6e6;border-radius:9px;font-size:15px;font-family:inherit;}
+  .btn{display:inline-block;width:100%;margin-top:18px;background:var(--fucsia);color:#fff;font-weight:700;padding:13px;border-radius:30px;border:none;cursor:pointer;font-size:16px;}
+  .btn:hover{background:var(--fucsia-osc);}
+  .link{display:block;text-align:center;margin-top:18px;color:var(--fucsia);text-decoration:none;font-size:14px;}
+  #msg{text-align:center;font-size:14px;margin-top:14px;display:none;}
+  .entrada{border:2px solid #f3d6e6;border-radius:16px;padding:18px;text-align:center;margin-top:16px;background:#fff;}
+  .entrada h3{color:var(--fucsia);font-size:15px;margin-bottom:10px;}
+  .entrada img{width:200px;max-width:80%;}
+  .entrada .cod{font-size:10px;color:#bbb;margin-top:6px;word-break:break-all;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>🎟️ Mis Entradas</h1>
+    <p>Ingresá tu email y DNI para ver tus entradas del Torneo Madre de Ciudades.</p>
+  </div>
+
+  <div class="card" id="cardForm">
+    <form id="form">
+      <label>Email</label>
+      <input id="email" type="email" required placeholder="tu@email.com">
+      <label>DNI</label>
+      <input id="dni" required placeholder="Sin puntos">
+      <button type="submit" class="btn" id="btn">Ver mis entradas</button>
+      <p id="msg"></p>
+    </form>
+    <a href="/" class="link">← Volver al inicio</a>
+  </div>
+
+  <div id="resultado"></div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  $('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = $('btn'), msg = $('msg');
+    btn.disabled = true; btn.textContent = 'Buscando…'; msg.style.display='none';
+    try{
+      const r = await fetch('/api/mis-entradas', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email:$('email').value, dni:$('dni').value })
+      });
+      const data = await r.json();
+      const ordenes = data.ordenes || [];
+      const cont = $('resultado'); cont.innerHTML = '';
+      const totalQrs = ordenes.reduce((a,o)=>a+(o.qrs?.length||0),0);
+      if(totalQrs === 0){
+        msg.style.color = '#7a5066';
+        msg.innerHTML = 'No encontramos entradas con esos datos.<br>Revisá que el email y el DNI sean los de la compra.';
+        msg.style.display = 'block';
+      } else {
+        $('cardForm').style.display = 'none';
+        let html = '<div class="card"><h2 style="color:var(--fucsia);text-align:center;font-size:20px;">Tenés '+totalQrs+' entrada(s) 🎉</h2>';
+        let n = 0;
+        ordenes.forEach(o => (o.qrs||[]).forEach(q => {
+          n++;
+          html += '<div class="entrada"><h3>🎟️ Entrada '+n+'</h3>'+
+                  '<img src="'+q.url+'" alt="QR"><div class="cod">'+q.codigo+'</div></div>';
+        }));
+        html += '<a href="/mis-entradas.html" class="link">🔄 Buscar con otros datos</a>'+
+                '<a href="/" class="link">← Volver al inicio</a></div>';
+        cont.innerHTML = html;
+      }
+    }catch(ex){
+      msg.style.color = '#dc2626'; msg.textContent = 'Hubo un error. Probá de nuevo.'; msg.style.display='block';
+    }
+    btn.disabled = false; btn.textContent = 'Ver mis entradas';
+  });
+</script>
+</body>
+</html>

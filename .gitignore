@@ -1,0 +1,21 @@
+# Secretos — NUNCA subir al repo
+.env
+backend/.env
+*.env
+
+# Dependencias
+node_modules/
+backend/node_modules/
+
+# QR generados (datos de entradas)
+backend/qrs/
+
+# Logs y temporales
+*.log
+npm-debug.log*
+.DS_Store
+
+# Documentos internos / borradores — NO van al deploy (evita exponerlos si el repo es público)
+/*.pdf
+/*.html
+/test-mp.mjs

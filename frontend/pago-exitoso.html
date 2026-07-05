@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>¡Pago confirmado! — Torneo Madre de Ciudades</title>
+<style>
+  :root{--fucsia:#d6006e;--fucsia-osc:#9e0052;--rosa:#fdeef6;--tinta:#2a0a1c;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,var(--rosa),#fff);min-height:100vh;color:var(--tinta);padding:24px;}
+  .wrap{max-width:520px;margin:24px auto;}
+  .card{background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(214,0,110,.15);padding:36px 30px;text-align:center;}
+  #spinner{display:inline-block;width:46px;height:46px;border:5px solid #f3d6e6;border-top-color:var(--fucsia);border-radius:50%;animation:girar 1s linear infinite;margin-bottom:14px;}
+  @keyframes girar{to{transform:rotate(360deg);}}
+  .ico{font-size:60px;}
+  h1{color:var(--fucsia);font-size:26px;margin:8px 0;}
+  p{color:#5a3548;font-size:15px;margin-bottom:6px;}
+  .entradas{margin-top:24px;display:grid;gap:16px;}
+  .entrada{border:2px solid #f3d6e6;border-radius:16px;padding:18px;background:#fff;}
+  .entrada h3{color:var(--fucsia);font-size:15px;margin-bottom:10px;}
+  .entrada img{width:200px;max-width:80%;}
+  .entrada .cod{font-size:10px;color:#bbb;margin-top:6px;word-break:break-all;}
+  .btn{display:inline-block;margin-top:24px;background:var(--fucsia);color:#fff;font-weight:700;padding:13px 30px;border-radius:30px;text-decoration:none;}
+  .btn:hover{background:var(--fucsia-osc);}
+  .nota{background:var(--rosa);border-radius:12px;padding:12px;font-size:13px;color:#7a5066;margin-top:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div id="spinner"></div>
+    <div id="ico" class="ico" style="display:none;"></div>
+    <h1 id="titulo">Procesando tu pago…</h1>
+    <p id="msg">Estamos confirmando tu pago con MercadoPago.</p>
+    <div id="entradas" class="entradas"></div>
+    <div id="nota" class="nota" style="display:none;">📱 Mostrá cada QR en la puerta del estadio, desde el celular o impreso. También te los enviamos por mail.</div>
+    <a href="/" class="btn">Volver al inicio</a>
+  </div>
+</div>
+
+<script>
+  const orden = new URLSearchParams(location.search).get('orden');
+
+  function mostrarEntradas(o){
+    document.getElementById('spinner').style.display = 'none';
+    const ico = document.getElementById('ico');
+    ico.style.display = 'block'; ico.textContent = '✅';
+    document.getElementById('titulo').textContent = '¡Pago confirmado, ' + (o.nombre || '') + '! 🎉';
+    document.getElementById('msg').innerHTML =
+      'Tus <b>' + o.cantidad + '</b> entrada(s) están listas. Te las enviamos a <b>' + o.email + '</b>.';
+
+    const cont = document.getElementById('entradas');
+    (o.qrs || []).forEach((q, i) => {
+      const div = document.createElement('div');
+      div.className = 'entrada';
+      div.innerHTML = '<h3>🎟️ Entrada ' + (i+1) + ' de ' + o.cantidad + '</h3>' +
+                      '<img src="' + q.url + '" alt="QR entrada ' + (i+1) + '">' +
+                      '<div class="cod">' + q.codigo + '</div>';
+      cont.appendChild(div);
+    });
+    document.getElementById('nota').style.display = 'block';
+  }
+
+  async function check(intentos){
+    if(!orden){ document.getElementById('msg').textContent = 'No se recibió el número de orden.'; document.getElementById('spinner').style.display='none'; return; }
+    try{
+      const r = await fetch('/api/orders/' + orden, { headers:{'ngrok-skip-browser-warning':'1'} });
+      if(r.ok){
+        const o = await r.json();
+        if(o.estado === 'pagada'){ mostrarEntradas(o); return; }
+      }
+    }catch(e){}
+    if(intentos > 0) setTimeout(() => check(intentos - 1), 2000);
+    else {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('ico').style.display = 'block';
+      document.getElementById('ico').textContent = '⌛';
+      document.getElementById('titulo').textContent = 'Pago en proceso';
+      document.getElementById('msg').innerHTML = 'Apenas se acredite, te llegan las entradas al mail. Podés cerrar esta página.';
+    }
+  }
+  check(30);
+</script>
+</body>
+</html>
