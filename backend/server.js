@@ -344,18 +344,22 @@ app.post('/api/validar', rateLimit({ windowMs: 60000, max: 120 }), async (req, r
 
 app.get('/health', (_req, res) => res.send('Backend Torneo Madre de Ciudades ✅'))
 
-// Conectar a la base y crear las tablas (si no existen) antes de levantar el server
-try {
-  await sequelize.authenticate()
-  await sequelize.sync() // crea 'ordenes' y 'entradas' si no existen
-  console.log('🗄️  Base MySQL conectada')
-} catch (e) {
-  console.error('❌ No se pudo conectar a la base:', e?.message || e)
-  console.error('   Revisá DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME en el .env')
-}
-
+// Levantar el server YA, sin bloquear por la base (Render necesita que responda rápido)
 app.listen(PORT, () => {
-  console.log(`🚀 Backend corriendo en http://localhost:${PORT}`)
-  if (!process.env.MP_ACCESS_TOKEN) console.warn('⚠️ Falta MP_ACCESS_TOKEN en el .env')
+  console.log(`🚀 Backend corriendo en el puerto ${PORT}`)
+  if (!process.env.MP_ACCESS_TOKEN) console.warn('⚠️ Falta MP_ACCESS_TOKEN')
   console.log(`💳 Pagos: MercadoPago · cargo por servicio ${CARGO_PCT}%`)
 })
+
+// Conectar a la base en segundo plano y crear las tablas (si no existen)
+sequelize.authenticate()
+  .then(() => sequelize.sync())
+  .then(() => console.log('🗄️  Base MySQL conectada'))
+  .catch(e => {
+    console.error('❌ No se pudo conectar a la base:', e?.message || e)
+    console.error('   Revisá DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME y el ALLOWLIST de IPs de Aiven')
+  })
+
+// Red de seguridad: que un error async no tumbe el proceso (evita el crash-loop)
+process.on('unhandledRejection', e => console.error('⚠️ unhandledRejection:', e?.message || e))
+process.on('uncaughtException',  e => console.error('⚠️ uncaughtException:', e?.message || e))
