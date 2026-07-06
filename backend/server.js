@@ -7,14 +7,14 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { randomUUID, createHmac, timingSafeEqual } from 'crypto'
+import { randomUUID, createHmac, timingSafeEqual, scryptSync } from 'crypto'
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 import QRCode from 'qrcode'
 import nodemailer from 'nodemailer'
-import { sequelize, Orden, Entrada } from './models/index.js'
+import { sequelize, Orden, Entrada, Usuario } from './models/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: join(__dirname, '.env') })
@@ -67,6 +67,46 @@ function rateLimit({ windowMs, max, msg }) {
     if (!rec || now > rec.reset) { rec = { count: 0, reset: now + windowMs }; hits.set(ip, rec) }
     rec.count++
     if (rec.count > max) return res.status(429).json({ error: msg || 'Demasiadas solicitudes. Probá en un momento.' })
+    next()
+  }
+}
+
+// ───── Auth del panel (admin / control) ─────
+function hashPassword(password, salt) {
+  return scryptSync(String(password), salt, 64).toString('hex')
+}
+function verifyPassword(password, salt, hash) {
+  const a = Buffer.from(hashPassword(password, salt), 'hex')
+  const b = Buffer.from(hash, 'hex')
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+// Token de sesión firmado (mini-JWT con HMAC), válido 12 h
+function firmarToken(payload) {
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + 12 * 3600 * 1000 })).toString('base64url')
+  const sig = createHmac('sha256', QR_SECRET).update(body).digest('base64url').slice(0, 32)
+  return `${body}.${sig}`
+}
+function verificarToken(token) {
+  const [body, sig] = String(token || '').split('.')
+  if (!body || !sig) return null
+  const esperado = createHmac('sha256', QR_SECRET).update(body).digest('base64url').slice(0, 32)
+  const a = Buffer.from(sig), b = Buffer.from(esperado)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null
+  try {
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString())
+    if (p.exp && Date.now() > p.exp) return null
+    return p
+  } catch { return null }
+}
+function tokenDeReq(req) {
+  return verificarToken((req.headers.authorization || '').replace(/^Bearer /, ''))
+}
+function requireAuth(roles) {
+  return (req, res, next) => {
+    const p = tokenDeReq(req)
+    if (!p) return res.status(401).json({ error: 'No autorizado' })
+    if (roles && !roles.includes(p.rol)) return res.status(403).json({ error: 'Sin permiso' })
+    req.usuario = p
     next()
   }
 }
@@ -342,10 +382,12 @@ app.post('/api/mis-entradas', rateLimit({ windowMs: 60000, max: 10, msg: 'Demasi
 
 // 6) VALIDAR entrada en la puerta (escaneo del QR) — verifica firma + UN SOLO USO
 //    Protegido con token de staff en el header X-Scan-Token.
-app.post('/api/validar', rateLimit({ windowMs: 60000, max: 120 }), async (req, res) => {
-  if (!SCAN_TOKEN || req.headers['x-scan-token'] !== SCAN_TOKEN) {
-    return res.status(401).json({ ok: false, error: 'No autorizado' })
-  }
+app.post('/api/validar', rateLimit({ windowMs: 60000, max: 300 }), async (req, res) => {
+  // Autoriza si trae sesión de control/admin O el token de escaneo por header
+  const p = tokenDeReq(req)
+  const okAuth = (p && ['control', 'admin'].includes(p.rol)) ||
+                 (SCAN_TOKEN && req.headers['x-scan-token'] === SCAN_TOKEN)
+  if (!okAuth) return res.status(401).json({ ok: false, error: 'No autorizado' })
   const { codigo } = req.body || {}
   if (!codigo) return res.status(400).json({ ok: false, error: 'Falta el código' })
 
@@ -374,6 +416,44 @@ app.post('/api/validar', rateLimit({ windowMs: 60000, max: 120 }), async (req, r
   } catch (e) {
     console.error('❌ Error validando:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'Error al validar' })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 7) PANEL ADMIN — login + resumen de ventas
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/admin/login', rateLimit({ windowMs: 60000, max: 10, msg: 'Demasiados intentos. Esperá un minuto.' }), async (req, res) => {
+  try {
+    const { usuario, password } = req.body || {}
+    if (!usuario || !password) return res.status(400).json({ error: 'Faltan usuario y contraseña' })
+    const u = await Usuario.findOne({ where: { usuario: String(usuario).trim() } })
+    if (!u || !verifyPassword(password, u.salt, u.hash)) {
+      return res.status(401).json({ error: 'Usuario o contraseña incorrectos' })
+    }
+    res.json({ token: firmarToken({ usuario: u.usuario, rol: u.rol }), rol: u.rol, usuario: u.usuario })
+  } catch (e) {
+    console.error('❌ Error en login:', e?.message || e)
+    res.status(500).json({ error: 'Error al iniciar sesión' })
+  }
+})
+
+// Resumen de ventas (solo admin): totales + tabla de compradores
+app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
+  try {
+    const ordenes = await Orden.findAll({ where: { estado: 'pagada' }, order: [['createdAt', 'DESC']] })
+    const totalEntradas  = ordenes.reduce((a, o) => a + o.cantidad, 0)
+    const totalRecaudado = ordenes.reduce((a, o) => a + o.total, 0)
+    const escaneadas     = await Entrada.count({ where: { usado: true } })
+    res.json({
+      totalEntradas, totalRecaudado, cantidadOrdenes: ordenes.length, escaneadas,
+      ordenes: ordenes.map(o => ({
+        nombre: o.nombre, email: o.email, dni: o.dni,
+        cantidad: o.cantidad, total: o.total, fecha: o.createdAt,
+      })),
+    })
+  } catch (e) {
+    console.error('❌ Error en resumen:', e?.message || e)
+    res.status(500).json({ error: 'Error al obtener el resumen' })
   }
 })
 

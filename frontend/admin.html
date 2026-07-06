@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel — Torneo Madre de Ciudades</title>
+<style>
+  :root{--fucsia:#d6006e;--fucsia-osc:#9e0052;--rosa:#fdeef6;--tinta:#2a0a1c;--ok:#16a34a;--err:#dc2626;--warn:#d97706;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:var(--rosa);color:var(--tinta);min-height:100vh;}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:10px;flex-wrap:wrap;}
+  .topbar h1{color:var(--fucsia);font-size:20px;}
+  .btn{background:var(--fucsia);color:#fff;border:none;border-radius:24px;padding:9px 18px;font-weight:700;cursor:pointer;font-size:14px;}
+  .btn:hover{background:var(--fucsia-osc);}
+  .btn.ghost{background:#fff;color:var(--fucsia);border:1px solid #f3c3dc;}
+  /* LOGIN */
+  .login{max-width:360px;margin:60px auto;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(214,0,110,.15);padding:32px 26px;}
+  .login h2{color:var(--fucsia);text-align:center;margin-bottom:6px;}
+  .login p{text-align:center;color:#7a5066;font-size:13px;margin-bottom:18px;}
+  label{display:block;font-weight:600;font-size:13px;margin:10px 0 4px;}
+  input{width:100%;padding:11px 12px;border:1px solid #f3d6e6;border-radius:10px;font-size:15px;font-family:inherit;}
+  .msg{color:var(--err);font-size:13px;text-align:center;margin-top:10px;min-height:18px;}
+  /* CARDS */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+  .card{background:#fff;border-radius:14px;padding:16px;text-align:center;box-shadow:0 6px 18px rgba(214,0,110,.08);}
+  .card .n{font-size:30px;font-weight:800;color:var(--fucsia);}
+  .card .l{font-size:12px;color:#7a5066;margin-top:2px;}
+  /* TABLA */
+  .toolbar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .toolbar input{flex:1;min-width:160px;}
+  .tablebox{background:#fff;border-radius:14px;overflow:auto;box-shadow:0 6px 18px rgba(214,0,110,.08);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid #f3e0ec;white-space:nowrap;}
+  th{background:var(--rosa);color:var(--fucsia);font-size:12px;position:sticky;top:0;}
+  td.num,th.num{text-align:right;}
+  /* CONTROL / SCANNER */
+  #reader{width:100%;max-width:360px;margin:0 auto;border-radius:14px;overflow:hidden;}
+  .result{max-width:360px;margin:14px auto;border-radius:16px;padding:22px;text-align:center;color:#fff;font-weight:700;display:none;}
+  .result.ok{background:var(--ok);} .result.err{background:var(--err);} .result.warn{background:var(--warn);}
+  .result .big{font-size:40px;} .result .nom{font-size:16px;margin-top:4px;font-weight:600;}
+  .counter{text-align:center;font-size:14px;color:#7a5066;margin:8px 0;}
+  .manual{max-width:360px;margin:10px auto;display:flex;gap:8px;}
+  .hint{text-align:center;font-size:12px;color:#7a5066;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ══ LOGIN ══ -->
+  <div id="loginView">
+    <div class="login">
+      <h2>🎀 Panel del Torneo</h2>
+      <p>Madre de Ciudades — ingreso de staff</p>
+      <label>Usuario</label>
+      <input id="f_user" autocomplete="username" placeholder="admin o control">
+      <label>Contraseña</label>
+      <input id="f_pass" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button class="btn" style="width:100%;margin-top:16px;" onclick="login()">Ingresar</button>
+      <div class="msg" id="loginMsg"></div>
+    </div>
+  </div>
+
+  <!-- ══ ADMIN ══ -->
+  <div id="adminView" style="display:none;">
+    <div class="topbar">
+      <h1>📊 Ventas del Torneo</h1>
+      <div>
+        <button class="btn ghost" onclick="cargarResumen()">↻ Actualizar</button>
+        <button class="btn ghost" onclick="exportarCSV()">⬇ CSV</button>
+        <button class="btn" onclick="logout()">Salir</button>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="n" id="c_entradas">—</div><div class="l">Entradas vendidas</div></div>
+      <div class="card"><div class="n" id="c_recaudado">—</div><div class="l">Recaudado</div></div>
+      <div class="card"><div class="n" id="c_ordenes">—</div><div class="l">Compras</div></div>
+      <div class="card"><div class="n" id="c_escaneadas">—</div><div class="l">Ingresaron</div></div>
+    </div>
+    <div class="toolbar">
+      <input id="buscar" placeholder="🔎 Buscar por mail, nombre o DNI…" oninput="pintarTabla()">
+    </div>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Fecha</th><th>Nombre</th><th>Email</th><th>DNI</th><th class="num">Entradas</th><th class="num">Total</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ CONTROL (escaneo) ══ -->
+  <div id="controlView" style="display:none;">
+    <div class="topbar">
+      <h1>🎟️ Control de acceso</h1>
+      <button class="btn" onclick="logout()">Salir</button>
+    </div>
+    <div id="reader"></div>
+    <div class="counter">Ingresaron: <b id="ingresados">0</b> en esta sesión</div>
+    <div class="result" id="scanResult"><div class="big" id="scanIco"></div><div id="scanMsg"></div><div class="nom" id="scanNom"></div></div>
+    <div class="manual">
+      <input id="codigoManual" placeholder="…o pegá el código del QR">
+      <button class="btn" onclick="validarManual()">Validar</button>
+    </div>
+    <div class="hint">Apuntá la cámara al QR de la entrada. Permití el acceso a la cámara.</div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  let TOKEN = localStorage.getItem('torneo_token');
+  let ROL   = localStorage.getItem('torneo_rol');
+
+  function auth(){ return { 'Authorization': 'Bearer ' + TOKEN }; }
+
+  async function login(){
+    const usuario = $('f_user').value.trim(), password = $('f_pass').value;
+    $('loginMsg').textContent = '';
+    if(!usuario || !password){ $('loginMsg').textContent = 'Completá usuario y contraseña.'; return; }
+    try{
+      const r = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({usuario,password}) });
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'Error');
+      TOKEN = d.token; ROL = d.rol;
+      localStorage.setItem('torneo_token', TOKEN);
+      localStorage.setItem('torneo_rol', ROL);
+      router();
+    }catch(e){ $('loginMsg').textContent = e.message; }
+  }
+
+  function logout(){
+    localStorage.removeItem('torneo_token'); localStorage.removeItem('torneo_rol');
+    if(window._scanner){ try{ window._scanner.stop(); }catch(e){} }
+    location.reload();
+  }
+
+  function router(){
+    $('loginView').style.display = 'none';
+    $('adminView').style.display = 'none';
+    $('controlView').style.display = 'none';
+    if(ROL === 'admin'){ $('adminView').style.display = 'block'; cargarResumen(); }
+    else if(ROL === 'control'){ $('controlView').style.display = 'block'; iniciarEscaner(); }
+    else { $('loginView').style.display = 'block'; }
+  }
+
+  // ── ADMIN ──
+  let DATA = { ordenes: [] };
+  const fmt = n => '$' + Number(n||0).toLocaleString('es-AR');
+  const fecha = s => { const d = new Date(s); return d.toLocaleDateString('es-AR') + ' ' + d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); };
+
+  async function cargarResumen(){
+    try{
+      const r = await fetch('/api/admin/resumen', { headers: auth() });
+      if(r.status === 401){ logout(); return; }
+      DATA = await r.json();
+      $('c_entradas').textContent   = DATA.totalEntradas;
+      $('c_recaudado').textContent  = fmt(DATA.totalRecaudado);
+      $('c_ordenes').textContent    = DATA.cantidadOrdenes;
+      $('c_escaneadas').textContent = DATA.escaneadas;
+      pintarTabla();
+    }catch(e){ alert('No se pudo cargar el resumen'); }
+  }
+
+  function pintarTabla(){
+    const q = ($('buscar').value || '').toLowerCase().trim();
+    const rows = (DATA.ordenes || []).filter(o =>
+      !q || (o.email||'').toLowerCase().includes(q) || (o.nombre||'').toLowerCase().includes(q) || String(o.dni||'').includes(q));
+    $('tbody').innerHTML = rows.length ? rows.map(o =>
+      `<tr><td>${fecha(o.fecha)}</td><td>${esc(o.nombre)}</td><td>${esc(o.email)}</td><td>${esc(o.dni)}</td><td class="num">${o.cantidad}</td><td class="num">${fmt(o.total)}</td></tr>`
+    ).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">Sin resultados</td></tr>';
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  function exportarCSV(){
+    const filas = [['Fecha','Nombre','Email','DNI','Entradas','Total']];
+    (DATA.ordenes||[]).forEach(o => filas.push([fecha(o.fecha), o.nombre, o.email, o.dni, o.cantidad, o.total]));
+    const csv = filas.map(f => f.map(c => `"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'}));
+    a.download = 'ventas-torneo.csv'; a.click();
+  }
+
+  // ── CONTROL (escaneo) ──
+  let ingresados = 0, ultimo = '', bloqueado = false;
+  function iniciarEscaner(){
+    if(typeof Html5Qrcode === 'undefined'){ $('scanResult').style.display='block'; $('scanResult').className='result err'; $('scanMsg').textContent='No cargó el lector de QR (revisá internet).'; return; }
+    window._scanner = new Html5Qrcode('reader');
+    window._scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 },
+      onScan, () => {}).catch(() => {
+        $('scanResult').style.display='block'; $('scanResult').className='result err';
+        $('scanMsg').textContent='No se pudo abrir la cámara. Usá el campo manual.';
+      });
+  }
+  function onScan(txt){
+    if(bloqueado || txt === ultimo) return;
+    ultimo = txt; bloqueado = true;
+    validar(txt).finally(() => { setTimeout(() => { bloqueado = false; ultimo = ''; }, 2500); });
+  }
+  function validarManual(){ const c = $('codigoManual').value.trim(); if(c) validar(c); $('codigoManual').value=''; }
+
+  async function validar(codigo){
+    try{
+      const r = await fetch('/api/validar', { method:'POST', headers:{'Content-Type':'application/json', ...auth()}, body: JSON.stringify({codigo}) });
+      if(r.status === 401){ logout(); return; }
+      const d = await r.json();
+      const box = $('scanResult'); box.style.display='block';
+      if(d.ok){ box.className='result ok'; $('scanIco').textContent='✅'; $('scanMsg').textContent='INGRESO OK'; ingresados++; $('ingresados').textContent=ingresados; }
+      else if(d.estado==='usado'){ box.className='result warn'; $('scanIco').textContent='⚠️'; $('scanMsg').textContent='YA INGRESÓ'; }
+      else { box.className='result err'; $('scanIco').textContent='❌'; $('scanMsg').textContent = (d.msg||'ENTRADA NO VÁLIDA').toUpperCase(); }
+      $('scanNom').textContent = d.nombre || '';
+      if(navigator.vibrate) navigator.vibrate(d.ok ? 120 : [80,60,80]);
+    }catch(e){
+      const box = $('scanResult'); box.style.display='block'; box.className='result err';
+      $('scanIco').textContent='❌'; $('scanMsg').textContent='ERROR DE CONEXIÓN'; $('scanNom').textContent='';
+    }
+  }
+
+  // arranque
+  if(TOKEN && ROL) router(); else $('loginView').style.display='block';
+</script>
+</body>
+</html>
