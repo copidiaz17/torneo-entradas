@@ -208,7 +208,8 @@ app.post('/api/orders', rateLimit({ windowMs: 60000, max: 15 }), async (req, res
       body: {
         items,
         external_reference: orderId,
-        payer: { name: nombre, email },
+        // No forzamos payer.email: dejamos que MP ofrezca los métodos según el
+        // usuario logueado (incluido "dinero en cuenta"), no solo tarjetas.
         back_urls: {
           success: `${FRONTEND_URL}/pago-exitoso.html?orden=${orderId}`,
           pending: `${FRONTEND_URL}/pago-pendiente.html?orden=${orderId}`,
