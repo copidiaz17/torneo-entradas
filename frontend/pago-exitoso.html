@@ -39,7 +39,9 @@
 </div>
 
 <script>
-  const orden = new URLSearchParams(location.search).get('orden');
+  const params = new URLSearchParams(location.search);
+  const orden = params.get('orden');
+  const paymentId = params.get('payment_id') || params.get('collection_id');
 
   function mostrarEntradas(o){
     document.getElementById('spinner').style.display = 'none';
@@ -61,25 +63,30 @@
     document.getElementById('nota').style.display = 'block';
   }
 
-  async function check(intentos){
+  async function confirmar(intentos){
     if(!orden){ document.getElementById('msg').textContent = 'No se recibió el número de orden.'; document.getElementById('spinner').style.display='none'; return; }
     try{
-      const r = await fetch('/api/orders/' + orden, { headers:{'ngrok-skip-browser-warning':'1'} });
+      // Pide al backend que verifique el pago con MP y emita (no depende del webhook)
+      const r = await fetch('/api/orders/' + orden + '/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_id: paymentId }),
+      });
       if(r.ok){
         const o = await r.json();
         if(o.estado === 'pagada'){ mostrarEntradas(o); return; }
       }
     }catch(e){}
-    if(intentos > 0) setTimeout(() => check(intentos - 1), 2000);
+    if(intentos > 0) setTimeout(() => confirmar(intentos - 1), 2500);
     else {
       document.getElementById('spinner').style.display = 'none';
       document.getElementById('ico').style.display = 'block';
       document.getElementById('ico').textContent = '⌛';
       document.getElementById('titulo').textContent = 'Pago en proceso';
-      document.getElementById('msg').innerHTML = 'Apenas se acredite, te llegan las entradas al mail. Podés cerrar esta página.';
+      document.getElementById('msg').innerHTML = 'Si pagaste en efectivo, apenas se acredite te llegan las entradas al mail. Si pagaste con tarjeta y ves esto, recargá esta página en un momento.';
     }
   }
-  check(30);
+  confirmar(8);
 </script>
 </body>
 </html>

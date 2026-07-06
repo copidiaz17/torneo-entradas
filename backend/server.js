@@ -234,8 +234,8 @@ app.post('/api/orders', rateLimit({ windowMs: 60000, max: 15 }), async (req, res
 app.post('/api/webhooks/mp', async (req, res) => {
   res.sendStatus(200) // responder rápido siempre
   try {
-    const type = req.query.type || req.body?.type
-    const paymentId = req.query['data.id'] || req.body?.data?.id
+    const type = req.query.type || req.query.topic || req.body?.type
+    const paymentId = req.query['data.id'] || req.query.id || req.body?.data?.id
     if (type !== 'payment' || !paymentId) return
 
     const pago = await paymentClient.get({ id: paymentId })
@@ -282,6 +282,40 @@ app.get('/api/orders/:id', async (req, res) => {
   const orden = await Orden.findByPk(req.params.id, { include: [{ model: Entrada, as: 'qrs' }] })
   if (!orden) return res.status(404).json({ error: 'Orden no encontrada' })
   res.json(orden)
+})
+
+// 4b) CONFIRMAR AL VOLVER DEL PAGO — verifica el pago con MP y emite las entradas.
+//     Es la red de seguridad si el webhook no llegó (servicio dormido, etc.).
+app.post('/api/orders/:id/confirmar', async (req, res) => {
+  try {
+    const orden = await Orden.findByPk(req.params.id)
+    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' })
+
+    if (orden.estado !== 'pagada') {
+      let pago = null
+      const pid = req.body?.payment_id || req.query.payment_id
+      if (pid) pago = await paymentClient.get({ id: pid }).catch(() => null)
+      // Fallback: buscar el pago aprobado por external_reference (nº de orden)
+      if (!pago || pago.external_reference !== orden.id || pago.status !== 'approved') {
+        const r = await paymentClient.search({ options: { external_reference: orden.id } }).catch(() => null)
+        const aprobado = (r?.results || []).find(p => p.status === 'approved')
+        if (aprobado) pago = aprobado
+      }
+      if (pago && pago.status === 'approved' && pago.external_reference === orden.id) {
+        await confirmarYEmitir(orden, pago.id)
+      }
+    }
+
+    const qrs = await Entrada.findAll({ where: { orden_id: orden.id }, order: [['indice', 'ASC']] })
+    res.json({
+      id: orden.id, nombre: orden.nombre, email: orden.email,
+      cantidad: orden.cantidad, estado: orden.estado,
+      qrs: qrs.map(q => ({ url: q.url, codigo: q.codigo })),
+    })
+  } catch (e) {
+    console.error('❌ Error confirmando al retorno:', e?.message || e)
+    res.status(500).json({ error: 'No se pudo verificar el pago' })
+  }
 })
 
 // 5) "Mis Entradas": buscar entradas pagadas por email + DNI (passwordless)
