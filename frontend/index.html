@@ -447,6 +447,9 @@
       throw new Error();
     }catch(ex){ err.style.color='#dc2626'; err.textContent=ex.message || 'Hubo un error. Probá de nuevo.'; err.style.display='block'; b.disabled=false; b.innerHTML=txt; }
   }));
+
+  // Registrar visita (fire-and-forget, no bloquea nada si falla)
+  fetch('/api/visita', { method:'POST' }).catch(()=>{});
 </script>
 
 </body>

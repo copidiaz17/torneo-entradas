@@ -76,6 +76,9 @@
       <div class="card"><div class="n" id="c_recaudado">—</div><div class="l">Recaudado</div></div>
       <div class="card"><div class="n" id="c_ordenes">—</div><div class="l">Compras</div></div>
       <div class="card"><div class="n" id="c_escaneadas">—</div><div class="l">Ingresaron</div></div>
+      <div class="card"><div class="n" id="c_visitas">—</div><div class="l">Visitas a la página</div></div>
+      <div class="card"><div class="n" id="c_unicos">—</div><div class="l">Visitantes únicos</div></div>
+      <div class="card"><div class="n" id="c_visitas_hoy">—</div><div class="l">Visitas hoy</div></div>
     </div>
     <div class="toolbar">
       <input id="buscar" placeholder="🔎 Buscar por mail, nombre o DNI…" oninput="pintarTabla()">
@@ -158,6 +161,9 @@
       $('c_recaudado').textContent  = fmt(DATA.totalRecaudado);
       $('c_ordenes').textContent    = DATA.cantidadOrdenes;
       $('c_escaneadas').textContent = DATA.escaneadas;
+      $('c_visitas').textContent      = DATA.totalVisitas ?? '—';
+      $('c_unicos').textContent       = DATA.visitantesUnicos ?? '—';
+      $('c_visitas_hoy').textContent  = DATA.visitasHoy ?? '—';
       pintarTabla();
     }catch(e){ alert('No se pudo cargar el resumen'); }
   }

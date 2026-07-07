@@ -14,7 +14,8 @@ import { dirname, join } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 import QRCode from 'qrcode'
 import nodemailer from 'nodemailer'
-import { sequelize, Orden, Entrada, Usuario } from './models/index.js'
+import { Op } from 'sequelize'
+import { sequelize, Orden, Entrada, Usuario, Visita } from './models/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: join(__dirname, '.env') })
@@ -438,14 +439,34 @@ app.post('/api/admin/login', rateLimit({ windowMs: 60000, max: 10, msg: 'Demasia
 })
 
 // Resumen de ventas (solo admin): totales + tabla de compradores
+// Registrar visita a la landing (público, fire-and-forget desde el front)
+app.post('/api/visita', async (req, res) => {
+  try {
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || null
+    await Visita.create({ ip })
+    res.json({ ok: true })
+  } catch (e) {
+    // Nunca romper la carga de la página por el contador
+    res.json({ ok: false })
+  }
+})
+
 app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
   try {
     const ordenes = await Orden.findAll({ where: { estado: 'pagada' }, order: [['createdAt', 'DESC']] })
     const totalEntradas  = ordenes.reduce((a, o) => a + o.cantidad, 0)
     const totalRecaudado = ordenes.reduce((a, o) => a + o.total, 0)
     const escaneadas     = await Entrada.count({ where: { usado: true } })
+
+    // Visitas a la página
+    const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
+    const totalVisitas     = await Visita.count()
+    const visitantesUnicos = await Visita.count({ col: 'ip', distinct: true })
+    const visitasHoy       = await Visita.count({ where: { createdAt: { [Op.gte]: inicioHoy } } })
+
     res.json({
       totalEntradas, totalRecaudado, cantidadOrdenes: ordenes.length, escaneadas,
+      totalVisitas, visitantesUnicos, visitasHoy,
       ordenes: ordenes.map(o => ({
         nombre: o.nombre, email: o.email, dni: o.dni,
         cantidad: o.cantidad, total: o.total, fecha: o.createdAt,
