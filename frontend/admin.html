@@ -69,6 +69,7 @@
         <button class="btn ghost" onclick="cargarResumen()">↻ Actualizar</button>
         <button class="btn ghost" onclick="exportarCSV()">⬇ CSV</button>
         <button class="btn ghost" onclick="generarPrueba()">🧪 Entrada de prueba</button>
+        <button class="btn ghost" onclick="emitirCortesia()">🎫 Emitir cortesía</button>
         <button class="btn" onclick="logout()">Salir</button>
       </div>
     </div>
@@ -195,6 +196,24 @@
       $('pruebaBox').style.display = 'block';
       $('pruebaBox').scrollIntoView({ behavior:'smooth' });
     }catch(e){ alert('No se pudo generar la entrada de prueba'); }
+  }
+
+  async function emitirCortesia(){
+    const nombre = prompt('Nombre de la invitada (aparece en el mail):', '');
+    if(nombre === null) return;
+    const email = prompt('Email a donde enviar la entrada:', '');
+    if(!email || !email.includes('@')){ if(email!==null) alert('Email inválido'); return; }
+    const n = parseInt(prompt('¿Cuántas entradas de cortesía? (1 a 10)', '1'), 10);
+    if(!n || n < 1) return;
+    const cantidad = Math.min(Math.max(n,1),10);
+    if(!confirm('Emitir '+cantidad+' entrada(s) de CORTESÍA (sin costo, no cuenta como venta) y enviarla a '+email+' ?')) return;
+    try{
+      const r = await fetch('/api/admin/entrada-cortesia', { method:'POST', headers:{'Content-Type':'application/json', ...auth()}, body: JSON.stringify({ nombre, email, cantidad }) });
+      if(r.status === 401){ logout(); return; }
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'Error');
+      alert('✅ Cortesía emitida y enviada a '+d.email+' ('+d.cantidad+' entrada/s).');
+    }catch(e){ alert('No se pudo emitir la cortesía: ' + (e.message||'')); }
   }
 
   function pintarTabla(){

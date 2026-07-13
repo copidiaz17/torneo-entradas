@@ -476,12 +476,12 @@ app.post('/api/visita', async (req, res) => {
 app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
   try {
     // Excluye las órdenes de PRUEBA (metodo='prueba') para no ensuciar el panel.
-    const ordenes = await Orden.findAll({ where: { estado: 'pagada', metodo: { [Op.ne]: 'prueba' } }, order: [['createdAt', 'DESC']] })
+    const ordenes = await Orden.findAll({ where: { estado: 'pagada', metodo: { [Op.notIn]: ['prueba', 'cortesia'] } }, order: [['createdAt', 'DESC']] })
     const totalEntradas  = ordenes.reduce((a, o) => a + o.cantidad, 0)
     const totalRecaudado = ordenes.reduce((a, o) => a + o.total, 0)
     const escaneadas     = await Entrada.count({
       where: { usado: true },
-      include: [{ model: Orden, as: 'orden', attributes: [], required: true, where: { metodo: { [Op.ne]: 'prueba' } } }],
+      include: [{ model: Orden, as: 'orden', attributes: [], required: true, where: { metodo: { [Op.notIn]: ['prueba', 'cortesia'] } } }],
     })
 
     // Visitas a la página
@@ -526,6 +526,39 @@ app.post('/api/admin/entrada-prueba', requireAuth(['admin']), async (req, res) =
   } catch (e) {
     console.error('❌ Error generando entrada de prueba:', e?.message || e)
     res.status(500).json({ error: 'No se pudo generar la entrada de prueba' })
+  }
+})
+
+// Emitir una ENTRADA DE CORTESÍA (solo admin): QR real y escaneable ("Ingreso OK" normal),
+// se envía por email, y NO cuenta como venta (metodo='cortesia', excluida del panel).
+app.post('/api/admin/entrada-cortesia', requireAuth(['admin']), async (req, res) => {
+  try {
+    const nombre = String(req.body?.nombre || '').trim() || 'Invitación de cortesía'
+    const email  = String(req.body?.email || '').trim()
+    const cant   = Math.min(Math.max(parseInt(req.body?.cantidad, 10) || 1, 1), 10)
+    if (!email) return res.status(400).json({ error: 'Falta el email de la invitada' })
+
+    const orderId = 'orden_' + randomUUID()
+    const orden = await Orden.create({
+      id: orderId, nombre, email, dni: 'CORTESIA',
+      metodo: 'cortesia', cantidad: cant, subtotal: 0, cargo: 0, total: 0, estado: 'pagada',
+    })
+    const qrs = []
+    for (let i = 1; i <= cant; i++) {
+      const base = `${orderId}::${i}`
+      const codigo = firmarQR(base)
+      const nombreArchivo = `${orderId}-${i}.png`
+      const archivo = join(QR_DIR, nombreArchivo)
+      await QRCode.toFile(archivo, codigo, { width: 420, margin: 1, color: { dark: '#d6006e', light: '#ffffff' } })
+      qrs.push({ orden_id: orderId, indice: i, codigo, base, archivo, url: `/qr?c=${encodeURIComponent(codigo)}`, usado: false, usadoEn: null })
+    }
+    await Entrada.bulkCreate(qrs)
+    await enviarMail(orden, qrs)   // mismo mail de siempre, con los QR adjuntos
+    console.log(`🎫 Cortesía emitida: ${cant} entrada(s) → ${email} (${nombre})`)
+    res.json({ ok: true, ordenId: orderId, cantidad: cant, email })
+  } catch (e) {
+    console.error('❌ Error emitiendo cortesía:', e?.message || e)
+    res.status(500).json({ error: 'No se pudo emitir la cortesía' })
   }
 })
 
