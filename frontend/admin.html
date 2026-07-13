@@ -217,26 +217,33 @@
   }
 
   // ── CONTROL (escaneo) ──
-  let ingresados = 0, ultimo = '', ultimoTs = 0, procesando = false;
-  function iniciarEscaner(){
-    if(typeof Html5Qrcode === 'undefined'){ $('scanResult').style.display='block'; $('scanResult').className='result err'; $('scanMsg').textContent='No cargó el lector de QR (revisá internet).'; return; }
-    window._scanner = new Html5Qrcode('reader');
+  // Flujo puerta: escanea 1 → PAUSA la cámara y muestra solo el resultado →
+  // el operador toca "Escanear siguiente" → recién ahí se reanuda la cámara. (Evita doble escaneo.)
+  let ingresados = 0, procesando = false, pausada = false;
+  function arrancarCamara(){
     window._scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 },
       onScan, () => {}).catch(() => {
         $('scanResult').style.display='block'; $('scanResult').className='result err';
         $('scanMsg').textContent='No se pudo abrir la cámara. Usá el campo manual.';
       });
   }
+  function iniciarEscaner(){
+    if(typeof Html5Qrcode === 'undefined'){ $('scanResult').style.display='block'; $('scanResult').className='result err'; $('scanMsg').textContent='No cargó el lector de QR (revisá internet).'; return; }
+    window._scanner = new Html5Qrcode('reader');
+    arrancarCamara();
+  }
   function onScan(txt){
-    const now = Date.now();
-    // Un QR NUEVO se lee al instante. El MISMO QR se ignora unos segundos (evita doble lectura al sostenerlo).
     if(procesando) return;
-    if(txt === ultimo && (now - ultimoTs) < 3500) return;
-    ultimo = txt; ultimoTs = now; procesando = true;
+    procesando = true;
+    try { window._scanner.pause(true); pausada = true; } catch(e){}  // congela la cámara al detectar
+    $('reader').style.display = 'none';                // oculta la cámara → solo se ve el resultado
     validar(txt).finally(() => { procesando = false; });
   }
-  // Limpia el resultado y deja el lector listo para el próximo (permite reescanear hasta el mismo QR).
-  function scanSiguiente(){ $('scanResult').style.display='none'; ultimo=''; ultimoTs=0; }
+  // El operador confirma → se reactiva la cámara para el próximo.
+  function scanSiguiente(){
+    $('scanResult').style.display = 'none';
+    if(pausada){ $('reader').style.display = ''; try { window._scanner.resume(); } catch(e){ arrancarCamara(); } pausada = false; }
+  }
   function validarManual(){ const c = $('codigoManual').value.trim(); if(c) validar(c); $('codigoManual').value=''; }
 
   async function validar(codigo){
