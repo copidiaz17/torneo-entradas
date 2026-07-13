@@ -84,8 +84,7 @@
 
     <div id="pruebaBox" style="display:none;text-align:center;background:#fff8e1;border:1px solid #f0d060;border-radius:12px;padding:16px;margin-bottom:16px;">
       <div style="font-weight:700;color:#8a6d00;margin-bottom:8px;">🧪 Entrada de prueba (no cuenta en el panel — escaneala para probar)</div>
-      <img id="pruebaImg" alt="QR de prueba" style="width:220px;height:220px;">
-      <div id="pruebaCod" style="font-size:11px;color:#888;word-break:break-all;margin-top:6px;"></div>
+      <div id="pruebaQrs"></div>
       <div style="margin-top:8px;"><button class="btn ghost" onclick="document.getElementById('pruebaBox').style.display='none'">Cerrar</button></div>
     </div>
 
@@ -180,13 +179,19 @@
   }
 
   async function generarPrueba(){
+    const n = parseInt(prompt('¿Cuántas entradas de prueba? (1 a 5)', '1'), 10);
+    if(!n || n < 1) return;
+    const cantidad = Math.min(Math.max(n, 1), 5);
     try{
-      const r = await fetch('/api/admin/entrada-prueba', { method:'POST', headers: auth() });
+      const r = await fetch('/api/admin/entrada-prueba', { method:'POST', headers:{'Content-Type':'application/json', ...auth()}, body: JSON.stringify({ cantidad }) });
       if(r.status === 401){ logout(); return; }
       const d = await r.json();
-      if(!r.ok || !d.url) throw new Error(d.error || 'Error');
-      $('pruebaImg').src = d.url;
-      $('pruebaCod').textContent = d.codigo;
+      if(!r.ok || !d.qrs) throw new Error(d.error || 'Error');
+      $('pruebaQrs').innerHTML = d.qrs.map(q =>
+        '<div style="display:inline-block;margin:8px;text-align:center;vertical-align:top;">' +
+        '<img src="'+q.url+'" style="width:180px;height:180px;">' +
+        '<div style="font-size:12px;color:#8a6d00;font-weight:600;">entrada '+q.indice+' de '+d.cantidad+'</div></div>'
+      ).join('');
       $('pruebaBox').style.display = 'block';
       $('pruebaBox').scrollIntoView({ behavior:'smooth' });
     }catch(e){ alert('No se pudo generar la entrada de prueba'); }

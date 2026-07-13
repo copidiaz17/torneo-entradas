@@ -508,16 +508,21 @@ app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
 // va marcada como metodo='prueba' → NO aparece en ventas/recaudación/ingresos del panel.
 app.post('/api/admin/entrada-prueba', requireAuth(['admin']), async (req, res) => {
   try {
+    const cant = Math.min(Math.max(parseInt(req.body?.cantidad, 10) || 1, 1), 5)
     const orderId = 'orden_' + randomUUID()
     await Orden.create({
       id: orderId, nombre: 'ENTRADA DE PRUEBA', email: 'prueba@torneo.local', dni: 'PRUEBA',
-      metodo: 'prueba', cantidad: 1, subtotal: 0, cargo: 0, total: 0, estado: 'pagada',
+      metodo: 'prueba', cantidad: cant, subtotal: 0, cargo: 0, total: 0, estado: 'pagada',
     })
-    const base = `${orderId}::1`
-    const codigo = firmarQR(base)
-    const url = `/qr?c=${encodeURIComponent(codigo)}`
-    await Entrada.create({ orden_id: orderId, indice: 1, codigo, base, url, usado: false })
-    res.json({ ok: true, ordenId: orderId, codigo, url })
+    const qrs = []
+    for (let i = 1; i <= cant; i++) {
+      const base = `${orderId}::${i}`
+      const codigo = firmarQR(base)
+      const url = `/qr?c=${encodeURIComponent(codigo)}`
+      await Entrada.create({ orden_id: orderId, indice: i, codigo, base, url, usado: false })
+      qrs.push({ indice: i, codigo, url })
+    }
+    res.json({ ok: true, ordenId: orderId, cantidad: cant, qrs })
   } catch (e) {
     console.error('❌ Error generando entrada de prueba:', e?.message || e)
     res.status(500).json({ error: 'No se pudo generar la entrada de prueba' })
