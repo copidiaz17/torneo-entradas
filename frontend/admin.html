@@ -108,7 +108,9 @@
     </div>
     <div id="reader"></div>
     <div class="counter">Ingresaron: <b id="ingresados">0</b> en esta sesión</div>
-    <div class="result" id="scanResult"><div class="big" id="scanIco"></div><div id="scanMsg"></div><div class="nom" id="scanNom"></div></div>
+    <div class="result" id="scanResult"><div class="big" id="scanIco"></div><div id="scanMsg"></div><div class="nom" id="scanNom"></div>
+      <button class="btn" id="btnSiguiente" onclick="scanSiguiente()" style="margin-top:12px;">Escanear siguiente ▸</button>
+    </div>
     <div class="manual">
       <input id="codigoManual" placeholder="…o pegá el código del QR">
       <button class="btn" onclick="validarManual()">Validar</button>
@@ -210,7 +212,7 @@
   }
 
   // ── CONTROL (escaneo) ──
-  let ingresados = 0, ultimo = '', bloqueado = false;
+  let ingresados = 0, ultimo = '', ultimoTs = 0, procesando = false;
   function iniciarEscaner(){
     if(typeof Html5Qrcode === 'undefined'){ $('scanResult').style.display='block'; $('scanResult').className='result err'; $('scanMsg').textContent='No cargó el lector de QR (revisá internet).'; return; }
     window._scanner = new Html5Qrcode('reader');
@@ -221,10 +223,15 @@
       });
   }
   function onScan(txt){
-    if(bloqueado || txt === ultimo) return;
-    ultimo = txt; bloqueado = true;
-    validar(txt).finally(() => { setTimeout(() => { bloqueado = false; ultimo = ''; }, 2500); });
+    const now = Date.now();
+    // Un QR NUEVO se lee al instante. El MISMO QR se ignora unos segundos (evita doble lectura al sostenerlo).
+    if(procesando) return;
+    if(txt === ultimo && (now - ultimoTs) < 3500) return;
+    ultimo = txt; ultimoTs = now; procesando = true;
+    validar(txt).finally(() => { procesando = false; });
   }
+  // Limpia el resultado y deja el lector listo para el próximo (permite reescanear hasta el mismo QR).
+  function scanSiguiente(){ $('scanResult').style.display='none'; ultimo=''; ultimoTs=0; }
   function validarManual(){ const c = $('codigoManual').value.trim(); if(c) validar(c); $('codigoManual').value=''; }
 
   async function validar(codigo){
