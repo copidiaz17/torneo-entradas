@@ -430,10 +430,12 @@ app.post('/api/validar', rateLimit({ windowMs: 60000, max: 300 }), async (req, r
     )
     if (!afectadas) {
       const yaUsado = await Entrada.findOne({ where: { base } })
-      return res.json({ ok: false, estado: 'usado', msg: `Ya ingresó (${yaUsado?.usadoEn})`, nombre: orden.nombre })
+      const usadas = await Entrada.count({ where: { orden_id: orden.id, usado: true } })
+      return res.json({ ok: false, estado: 'usado', msg: `Ya ingresó (${yaUsado?.usadoEn})`, nombre: orden.nombre, cantidad: orden.cantidad, usadas })
     }
+    const usadas = await Entrada.count({ where: { orden_id: orden.id, usado: true } })
     const esPrueba = orden.metodo === 'prueba'
-    return res.json({ ok: true, estado: 'valido', msg: esPrueba ? 'PRUEBA · Ingreso OK' : 'Ingreso OK', nombre: orden.nombre, prueba: esPrueba })
+    return res.json({ ok: true, estado: 'valido', msg: esPrueba ? 'PRUEBA · Ingreso OK' : 'Ingreso OK', nombre: orden.nombre, cantidad: orden.cantidad, usadas, prueba: esPrueba })
   } catch (e) {
     console.error('❌ Error validando:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'Error al validar' })

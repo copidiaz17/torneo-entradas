@@ -243,7 +243,9 @@
       if(d.ok){ box.className='result ok'; $('scanIco').textContent='✅'; $('scanMsg').textContent='INGRESO OK'; ingresados++; $('ingresados').textContent=ingresados; }
       else if(d.estado==='usado'){ box.className='result warn'; $('scanIco').textContent='⚠️'; $('scanMsg').textContent='YA INGRESÓ'; }
       else { box.className='result err'; $('scanIco').textContent='❌'; $('scanMsg').textContent = (d.msg||'ENTRADA NO VÁLIDA').toUpperCase(); }
-      $('scanNom').textContent = d.nombre || '';
+      let info = d.nombre || '';
+      if(d.cantidad > 1 && d.usadas != null) info += '  ·  ' + d.usadas + ' de ' + d.cantidad;
+      $('scanNom').textContent = info;
       if(navigator.vibrate) navigator.vibrate(d.ok ? 120 : [80,60,80]);
     }catch(e){
       const box = $('scanResult'); box.style.display='block'; box.className='result err';
