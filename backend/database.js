@@ -18,7 +18,7 @@ export const sequelize = new Sequelize(
     logging: false,
     // Aiven exige SSL. Si algún día usás una base local sin SSL, poné DB_SSL=false en el .env
     dialectOptions: process.env.DB_SSL === 'false' ? {} : { ssl: { rejectUnauthorized: false } },
-    // Pool chico: como compartimos instancia con otro proyecto, no acaparamos conexiones.
-    pool: { max: 3, min: 0, idle: 10000, acquire: 30000 },
+    // Pool ampliado para el día del evento: 5 escáneres en puerta + admin + webhooks en simultáneo.
+    pool: { max: 10, min: 0, idle: 10000, acquire: 30000 },
   }
 )

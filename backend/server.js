@@ -115,7 +115,23 @@ function requireAuth(roles) {
 // Carpeta donde guardamos los QR generados
 const QR_DIR = join(__dirname, 'qrs')
 if (!existsSync(QR_DIR)) mkdirSync(QR_DIR, { recursive: true })
-app.use('/qrs', express.static(QR_DIR)) // servir las imágenes de los QR
+app.use('/qrs', express.static(QR_DIR)) // servir las imágenes de los QR (legacy, disco efímero)
+
+// Regenerar el QR AL VUELO desde el código firmado. Robusto ante el disco efímero de
+// Render (que borra los PNG en cada deploy): mientras el código sea válido, la imagen existe.
+app.get('/qr', async (req, res) => {
+  try {
+    const codigo = String(req.query.c || '')
+    if (!verificarQR(codigo)) return res.status(400).send('QR inválido')
+    const png = await QRCode.toBuffer(codigo, { width: 420, margin: 1, color: { dark: '#d6006e', light: '#ffffff' } })
+    res.set('Content-Type', 'image/png')
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.send(png)
+  } catch (e) {
+    console.error('❌ Error generando QR al vuelo:', e?.message || e)
+    res.status(500).send('Error generando QR')
+  }
+})
 
 // ───── MercadoPago ─────
 const mp = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
@@ -352,7 +368,7 @@ app.post('/api/orders/:id/confirmar', async (req, res) => {
     res.json({
       id: orden.id, nombre: orden.nombre, email: orden.email,
       cantidad: orden.cantidad, estado: orden.estado,
-      qrs: qrs.map(q => ({ url: q.url, codigo: q.codigo })),
+      qrs: qrs.map(q => ({ url: `/qr?c=${encodeURIComponent(q.codigo)}`, codigo: q.codigo })),
     })
   } catch (e) {
     console.error('❌ Error confirmando al retorno:', e?.message || e)
@@ -373,7 +389,10 @@ app.post('/api/mis-entradas', rateLimit({ windowMs: 60000, max: 10, msg: 'Demasi
       order: [['createdAt', 'DESC']],
     })
     res.json({
-      ordenes: encontradas.map(o => ({ id: o.id, fecha: o.createdAt, cantidad: o.cantidad, qrs: o.qrs })),
+      ordenes: encontradas.map(o => ({
+        id: o.id, fecha: o.createdAt, cantidad: o.cantidad,
+        qrs: o.qrs.map(q => ({ url: `/qr?c=${encodeURIComponent(q.codigo)}`, codigo: q.codigo, usado: q.usado })),
+      })),
     })
   } catch (e) {
     console.error('❌ Error en mis-entradas:', e?.message || e)
