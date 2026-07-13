@@ -432,7 +432,8 @@ app.post('/api/validar', rateLimit({ windowMs: 60000, max: 300 }), async (req, r
       const yaUsado = await Entrada.findOne({ where: { base } })
       return res.json({ ok: false, estado: 'usado', msg: `Ya ingresó (${yaUsado?.usadoEn})`, nombre: orden.nombre })
     }
-    return res.json({ ok: true, estado: 'valido', msg: 'Ingreso OK', nombre: orden.nombre })
+    const esPrueba = orden.metodo === 'prueba'
+    return res.json({ ok: true, estado: 'valido', msg: esPrueba ? 'PRUEBA · Ingreso OK' : 'Ingreso OK', nombre: orden.nombre, prueba: esPrueba })
   } catch (e) {
     console.error('❌ Error validando:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'Error al validar' })
@@ -472,10 +473,14 @@ app.post('/api/visita', async (req, res) => {
 
 app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
   try {
-    const ordenes = await Orden.findAll({ where: { estado: 'pagada' }, order: [['createdAt', 'DESC']] })
+    // Excluye las órdenes de PRUEBA (metodo='prueba') para no ensuciar el panel.
+    const ordenes = await Orden.findAll({ where: { estado: 'pagada', metodo: { [Op.ne]: 'prueba' } }, order: [['createdAt', 'DESC']] })
     const totalEntradas  = ordenes.reduce((a, o) => a + o.cantidad, 0)
     const totalRecaudado = ordenes.reduce((a, o) => a + o.total, 0)
-    const escaneadas     = await Entrada.count({ where: { usado: true } })
+    const escaneadas     = await Entrada.count({
+      where: { usado: true },
+      include: [{ model: Orden, as: 'orden', attributes: [], required: true, where: { metodo: { [Op.ne]: 'prueba' } } }],
+    })
 
     // Visitas a la página
     const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
@@ -494,6 +499,26 @@ app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
   } catch (e) {
     console.error('❌ Error en resumen:', e?.message || e)
     res.status(500).json({ error: 'Error al obtener el resumen' })
+  }
+})
+
+// Generar una ENTRADA DE PRUEBA (solo admin): es un QR real y escaneable, pero la orden
+// va marcada como metodo='prueba' → NO aparece en ventas/recaudación/ingresos del panel.
+app.post('/api/admin/entrada-prueba', requireAuth(['admin']), async (req, res) => {
+  try {
+    const orderId = 'orden_' + randomUUID()
+    await Orden.create({
+      id: orderId, nombre: 'ENTRADA DE PRUEBA', email: 'prueba@torneo.local', dni: 'PRUEBA',
+      metodo: 'prueba', cantidad: 1, subtotal: 0, cargo: 0, total: 0, estado: 'pagada',
+    })
+    const base = `${orderId}::1`
+    const codigo = firmarQR(base)
+    const url = `/qr?c=${encodeURIComponent(codigo)}`
+    await Entrada.create({ orden_id: orderId, indice: 1, codigo, base, url, usado: false })
+    res.json({ ok: true, ordenId: orderId, codigo, url })
+  } catch (e) {
+    console.error('❌ Error generando entrada de prueba:', e?.message || e)
+    res.status(500).json({ error: 'No se pudo generar la entrada de prueba' })
   }
 })
 

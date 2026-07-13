@@ -68,6 +68,7 @@
       <div>
         <button class="btn ghost" onclick="cargarResumen()">↻ Actualizar</button>
         <button class="btn ghost" onclick="exportarCSV()">⬇ CSV</button>
+        <button class="btn ghost" onclick="generarPrueba()">🧪 Entrada de prueba</button>
         <button class="btn" onclick="logout()">Salir</button>
       </div>
     </div>
@@ -80,6 +81,14 @@
       <div class="card"><div class="n" id="c_unicos">—</div><div class="l">Visitantes únicos</div></div>
       <div class="card"><div class="n" id="c_visitas_hoy">—</div><div class="l">Visitas hoy</div></div>
     </div>
+
+    <div id="pruebaBox" style="display:none;text-align:center;background:#fff8e1;border:1px solid #f0d060;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-weight:700;color:#8a6d00;margin-bottom:8px;">🧪 Entrada de prueba (no cuenta en el panel — escaneala para probar)</div>
+      <img id="pruebaImg" alt="QR de prueba" style="width:220px;height:220px;">
+      <div id="pruebaCod" style="font-size:11px;color:#888;word-break:break-all;margin-top:6px;"></div>
+      <div style="margin-top:8px;"><button class="btn ghost" onclick="document.getElementById('pruebaBox').style.display='none'">Cerrar</button></div>
+    </div>
+
     <div class="toolbar">
       <input id="buscar" placeholder="🔎 Buscar por mail, nombre o DNI…" oninput="pintarTabla()">
     </div>
@@ -166,6 +175,19 @@
       $('c_visitas_hoy').textContent  = DATA.visitasHoy ?? '—';
       pintarTabla();
     }catch(e){ alert('No se pudo cargar el resumen'); }
+  }
+
+  async function generarPrueba(){
+    try{
+      const r = await fetch('/api/admin/entrada-prueba', { method:'POST', headers: auth() });
+      if(r.status === 401){ logout(); return; }
+      const d = await r.json();
+      if(!r.ok || !d.url) throw new Error(d.error || 'Error');
+      $('pruebaImg').src = d.url;
+      $('pruebaCod').textContent = d.codigo;
+      $('pruebaBox').style.display = 'block';
+      $('pruebaBox').scrollIntoView({ behavior:'smooth' });
+    }catch(e){ alert('No se pudo generar la entrada de prueba'); }
   }
 
   function pintarTabla(){
