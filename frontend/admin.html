@@ -67,9 +67,10 @@
       <h1>📊 Ventas del Torneo</h1>
       <div>
         <button class="btn ghost" onclick="cargarResumen()">↻ Actualizar</button>
-        <button class="btn ghost" onclick="exportarCSV()">⬇ CSV</button>
-        <button class="btn ghost" onclick="generarPrueba()">🧪 Entrada de prueba</button>
-        <button class="btn ghost" onclick="emitirCortesia()">🎫 Emitir cortesía</button>
+        <button class="btn ghost" onclick="generarManual()">💵 Venta manual</button>
+        <button class="btn ghost adminonly" onclick="exportarCSV()">⬇ CSV</button>
+        <button class="btn ghost adminonly" onclick="generarPrueba()">🧪 Entrada de prueba</button>
+        <button class="btn ghost adminonly" onclick="emitirCortesia()">🎫 Emitir cortesía</button>
         <button class="btn" onclick="logout()">Salir</button>
       </div>
     </div>
@@ -94,8 +95,8 @@
     </div>
     <div class="tablebox">
       <table>
-        <thead><tr><th>Fecha</th><th>Nombre</th><th>Email</th><th>DNI</th><th class="num">Entradas</th><th class="num">Total</th></tr></thead>
-        <tbody id="tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">Cargando…</td></tr></tbody>
+        <thead><tr><th>Fecha</th><th>Nombre</th><th>Email</th><th>DNI</th><th class="num">Entradas</th><th class="num">Total</th><th></th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">Cargando…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -118,6 +119,16 @@
     <div class="hint">Apuntá la cámara al QR de la entrada. Permití el acceso a la cámara.</div>
   </div>
 
+</div>
+
+<!-- ══ MODAL: mostrar los QR de una compra ══ -->
+<div id="qrModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)cerrarQR()">
+  <div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:22px;text-align:center;">
+    <div id="qrModalTitulo" style="font-weight:800;color:#d6006e;font-size:17px;margin-bottom:4px;"></div>
+    <div id="qrModalSub" style="font-size:13px;color:#777;margin-bottom:14px;"></div>
+    <div id="qrModalBody"></div>
+    <button class="btn" style="margin-top:14px;" onclick="cerrarQR()">Cerrar</button>
+  </div>
 </div>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
@@ -154,6 +165,7 @@
     $('adminView').style.display = 'none';
     $('controlView').style.display = 'none';
     if(ROL === 'admin'){ $('adminView').style.display = 'block'; cargarResumen(); }
+    else if(ROL === 'venta'){ $('adminView').style.display = 'block'; document.querySelectorAll('.adminonly').forEach(el => el.style.display = 'none'); cargarResumen(); }
     else if(ROL === 'control'){ $('controlView').style.display = 'block'; iniciarEscaner(); }
     else { $('loginView').style.display = 'block'; }
   }
@@ -221,8 +233,9 @@
     const rows = (DATA.ordenes || []).filter(o =>
       !q || (o.email||'').toLowerCase().includes(q) || (o.nombre||'').toLowerCase().includes(q) || String(o.dni||'').includes(q));
     $('tbody').innerHTML = rows.length ? rows.map(o =>
-      `<tr><td>${fecha(o.fecha)}</td><td>${esc(o.nombre)}</td><td>${esc(o.email)}</td><td>${esc(o.dni)}</td><td class="num">${o.cantidad}</td><td class="num">${fmt(o.total)}</td></tr>`
-    ).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">Sin resultados</td></tr>';
+      `<tr><td>${fecha(o.fecha)}</td><td>${esc(o.nombre)}</td><td>${esc(o.email)}</td><td>${esc(o.dni)}</td><td class="num">${o.cantidad}</td><td class="num">${fmt(o.total)}</td>`
+      + `<td style="text-align:center;"><button class="btn ghost" style="padding:4px 10px;font-size:12px;" onclick="mostrarQR('${o.id}')">👁 Ver QR</button></td></tr>`
+    ).join('') : '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">Sin resultados</td></tr>';
   }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -233,6 +246,46 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'}));
     a.download = 'ventas-torneo.csv'; a.click();
+  }
+
+  // ── Mostrar los QR de una compra (para gente que llegó sin su entrada) ──
+  async function mostrarQR(ordenId){
+    try{
+      const r = await fetch('/api/admin/orden/' + encodeURIComponent(ordenId) + '/qrs', { headers: auth() });
+      if(r.status === 401){ logout(); return; }
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'Error');
+      $('qrModalTitulo').textContent = d.nombre + ' — ' + d.cantidad + ' entrada(s)';
+      $('qrModalSub').textContent = 'DNI ' + d.dni + ' · ' + d.email + ' · escaneá cada QR en la puerta';
+      $('qrModalBody').innerHTML = d.qrs.map(q =>
+        '<div style="display:inline-block;margin:8px;text-align:center;vertical-align:top;">' +
+        '<img src="' + q.url + '" style="width:220px;height:220px;' + (q.usado ? 'opacity:.35;' : '') + '">' +
+        '<div style="font-size:12px;font-weight:700;color:' + (q.usado ? '#b91c1c' : '#555') + ';">entrada ' + q.indice + ' de ' + d.cantidad + (q.usado ? ' · YA USADA' : '') + '</div></div>'
+      ).join('');
+      $('qrModal').style.display = 'flex';
+    }catch(e){ alert('No se pudieron mostrar los QR: ' + (e.message || '')); }
+  }
+  function cerrarQR(){ $('qrModal').style.display = 'none'; }
+
+  // ── Venta manual: transferencia → genera y envía las entradas, y las registra ──
+  async function generarManual(){
+    const nombre = prompt('Nombre del comprador:', '');
+    if(nombre === null) return;
+    if(!nombre.trim()){ alert('Falta el nombre.'); return; }
+    const email = prompt('Email a donde enviar las entradas:', '');
+    if(email === null) return;
+    if(!email || !email.includes('@')){ alert('Email inválido.'); return; }
+    const n = parseInt(prompt('¿Cuántas entradas?', '1'), 10);
+    if(!n || n < 1) return;
+    if(!confirm('Generar ' + n + ' entrada(s) por transferencia para ' + nombre + ' y enviarlas a ' + email + '?\n(Se registran como venta y aparecen en el listado.)')) return;
+    try{
+      const r = await fetch('/api/admin/entrada-manual', { method:'POST', headers:{'Content-Type':'application/json', ...auth()}, body: JSON.stringify({ nombre: nombre.trim(), email: email.trim(), cantidad: n }) });
+      if(r.status === 401){ logout(); return; }
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'Error');
+      alert('✅ ' + d.cantidad + ' entrada(s) generadas y enviadas a ' + d.email + '.\nTotal $' + Number(d.total).toLocaleString('es-AR') + '.');
+      cargarResumen();
+    }catch(e){ alert('No se pudo generar la venta manual: ' + (e.message || '')); }
   }
 
   // ── CONTROL (escaneo) ──

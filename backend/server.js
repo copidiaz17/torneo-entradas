@@ -473,7 +473,7 @@ app.post('/api/visita', async (req, res) => {
   }
 })
 
-app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
+app.get('/api/admin/resumen', requireAuth(['admin', 'venta']), async (req, res) => {
   try {
     // Excluye las órdenes de PRUEBA (metodo='prueba') para no ensuciar el panel.
     const ordenes = await Orden.findAll({ where: { estado: 'pagada', metodo: { [Op.notIn]: ['prueba', 'cortesia'] } }, order: [['createdAt', 'DESC']] })
@@ -494,6 +494,7 @@ app.get('/api/admin/resumen', requireAuth(['admin']), async (req, res) => {
       totalEntradas, totalRecaudado, cantidadOrdenes: ordenes.length, escaneadas,
       totalVisitas, visitantesUnicos, visitasHoy,
       ordenes: ordenes.map(o => ({
+        id: o.id, metodo: o.metodo,
         nombre: o.nombre, email: o.email, dni: o.dni,
         cantidad: o.cantidad, total: o.total, fecha: o.createdAt,
       })),
@@ -559,6 +560,58 @@ app.post('/api/admin/entrada-cortesia', requireAuth(['admin']), async (req, res)
   } catch (e) {
     console.error('❌ Error emitiendo cortesía:', e?.message || e)
     res.status(500).json({ error: 'No se pudo emitir la cortesía' })
+  }
+})
+
+// Ver los QR de una orden (admin/venta): para mostrarlos en pantalla y escanearlos en la puerta
+app.get('/api/admin/orden/:id/qrs', requireAuth(['admin', 'venta']), async (req, res) => {
+  try {
+    const orden = await Orden.findByPk(req.params.id)
+    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' })
+    const entradas = await Entrada.findAll({ where: { orden_id: orden.id }, order: [['indice', 'ASC']] })
+    res.json({
+      ok: true,
+      nombre: orden.nombre, email: orden.email, dni: orden.dni, cantidad: orden.cantidad,
+      qrs: entradas.map(e => ({ indice: e.indice, url: `/qr?c=${encodeURIComponent(e.codigo)}`, usado: e.usado })),
+    })
+  } catch (e) {
+    console.error('❌ Error obteniendo QRs de la orden:', e?.message || e)
+    res.status(500).json({ error: 'No se pudieron obtener los QR' })
+  }
+})
+
+// VENTA MANUAL (admin/venta): entrada pagada por transferencia. Cuenta como venta real,
+// aparece en el listado y se envía por email. Solo se pide nombre y email.
+app.post('/api/admin/entrada-manual', requireAuth(['admin', 'venta']), async (req, res) => {
+  try {
+    const nombre = String(req.body?.nombre || '').trim()
+    const email  = String(req.body?.email || '').trim()
+    const cant   = Math.min(Math.max(parseInt(req.body?.cantidad, 10) || 1, 1), MAX_ENTRADAS)
+    if (!nombre) return res.status(400).json({ error: 'Falta el nombre' })
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email inválido' })
+
+    const orderId  = 'orden_' + randomUUID()
+    const subtotal = PRECIO_ENTRADA * cant
+    const orden = await Orden.create({
+      id: orderId, nombre, email, dni: String(req.body?.dni || 'MANUAL').trim(),
+      metodo: 'transferencia', cantidad: cant, subtotal, cargo: 0, total: subtotal, estado: 'pagada',
+    })
+    const qrs = []
+    for (let i = 1; i <= cant; i++) {
+      const base = `${orderId}::${i}`
+      const codigo = firmarQR(base)
+      const nombreArchivo = `${orderId}-${i}.png`
+      const archivo = join(QR_DIR, nombreArchivo)
+      await QRCode.toFile(archivo, codigo, { width: 420, margin: 1, color: { dark: '#d6006e', light: '#ffffff' } })
+      qrs.push({ orden_id: orderId, indice: i, codigo, base, archivo, url: `/qr?c=${encodeURIComponent(codigo)}`, usado: false, usadoEn: null })
+    }
+    await Entrada.bulkCreate(qrs)
+    await enviarMail(orden, qrs)
+    console.log(`💵 Venta manual (transferencia): ${cant} entrada(s) → ${email} (${nombre}) · $${subtotal}`)
+    res.json({ ok: true, ordenId: orderId, cantidad: cant, email, total: subtotal, qrs: qrs.map(q => ({ indice: q.indice, url: q.url })) })
+  } catch (e) {
+    console.error('❌ Error en venta manual:', e?.message || e)
+    res.status(500).json({ error: 'No se pudo generar la venta manual' })
   }
 })
 
