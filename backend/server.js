@@ -477,6 +477,20 @@ app.get('/api/admin/resumen', requireAuth(['admin', 'venta']), async (req, res) 
   try {
     // Excluye las órdenes de PRUEBA (metodo='prueba') para no ensuciar el panel.
     const ordenes = await Orden.findAll({ where: { estado: 'pagada', metodo: { [Op.notIn]: ['prueba', 'cortesia'] } }, order: [['createdAt', 'DESC']] })
+
+    const listado = ordenes.map(o => ({
+      id: o.id, metodo: o.metodo,
+      nombre: o.nombre, email: o.email, dni: o.dni,
+      cantidad: o.cantidad, total: o.total, fecha: o.createdAt,
+    }))
+
+    // El perfil "venta" (control manual en la puerta) solo ve el listado de compradores
+    // para buscar por DNI y mostrar/generar entradas. NO recibe estadísticas:
+    // ni recaudación, ni entradas vendidas, ni visitas. Ni siquiera llegan a su navegador.
+    if (req.usuario.rol === 'venta') {
+      return res.json({ ordenes: listado })
+    }
+
     const totalEntradas  = ordenes.reduce((a, o) => a + o.cantidad, 0)
     const totalRecaudado = ordenes.reduce((a, o) => a + o.total, 0)
     const escaneadas     = await Entrada.count({
@@ -493,11 +507,7 @@ app.get('/api/admin/resumen', requireAuth(['admin', 'venta']), async (req, res) 
     res.json({
       totalEntradas, totalRecaudado, cantidadOrdenes: ordenes.length, escaneadas,
       totalVisitas, visitantesUnicos, visitasHoy,
-      ordenes: ordenes.map(o => ({
-        id: o.id, metodo: o.metodo,
-        nombre: o.nombre, email: o.email, dni: o.dni,
-        cantidad: o.cantidad, total: o.total, fecha: o.createdAt,
-      })),
+      ordenes: listado,
     })
   } catch (e) {
     console.error('❌ Error en resumen:', e?.message || e)
