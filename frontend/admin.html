@@ -90,6 +90,37 @@
       <div style="margin-top:8px;"><button class="btn ghost" onclick="document.getElementById('pruebaBox').style.display='none'">Cerrar</button></div>
     </div>
 
+  </div>
+
+  <!-- ══ CONTROL (escaneo con botón) ══ -->
+  <div id="controlView" style="display:none;">
+    <div class="topbar">
+      <h1>🎟️ Control de acceso</h1>
+      <div>
+        <button class="btn ghost" onclick="cargarResumen()">↻ Actualizar</button>
+        <button class="btn" onclick="logout()">Salir</button>
+      </div>
+    </div>
+    <div style="text-align:center;margin-bottom:14px;">
+      <button class="btn" id="btnAbrirCam" onclick="abrirCamara()" style="font-size:16px;padding:13px 26px;">📷 Abrir cámara para escanear</button>
+    </div>
+    <div id="scanZone" style="display:none;">
+      <div id="reader"></div>
+      <div class="counter">Ingresaron: <b id="ingresados">0</b> en esta sesión</div>
+      <div class="result" id="scanResult"><div class="big" id="scanIco"></div><div id="scanMsg"></div><div class="nom" id="scanNom"></div>
+        <button class="btn" id="btnSiguiente" onclick="scanSiguiente()" style="margin-top:12px;">Escanear siguiente ▸</button>
+      </div>
+      <div class="manual">
+        <input id="codigoManual" placeholder="…o pegá el código del QR">
+        <button class="btn" onclick="validarManual()">Validar</button>
+      </div>
+      <div class="hint">Apuntá la cámara al QR de la entrada. Permití el acceso a la cámara.</div>
+      <div style="text-align:center;margin-top:10px;"><button class="btn ghost" onclick="cerrarCamara()">✕ Cerrar cámara</button></div>
+    </div>
+  </div>
+
+  <!-- ══ LISTADO de compradores (compartido: admin / venta / control) ══ -->
+  <div id="listadoSection" style="display:none;">
     <div class="toolbar">
       <input id="buscar" placeholder="🔎 Buscar por mail, nombre o DNI…" oninput="pintarTabla()">
     </div>
@@ -99,24 +130,6 @@
         <tbody id="tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">Cargando…</td></tr></tbody>
       </table>
     </div>
-  </div>
-
-  <!-- ══ CONTROL (escaneo) ══ -->
-  <div id="controlView" style="display:none;">
-    <div class="topbar">
-      <h1>🎟️ Control de acceso</h1>
-      <button class="btn" onclick="logout()">Salir</button>
-    </div>
-    <div id="reader"></div>
-    <div class="counter">Ingresaron: <b id="ingresados">0</b> en esta sesión</div>
-    <div class="result" id="scanResult"><div class="big" id="scanIco"></div><div id="scanMsg"></div><div class="nom" id="scanNom"></div>
-      <button class="btn" id="btnSiguiente" onclick="scanSiguiente()" style="margin-top:12px;">Escanear siguiente ▸</button>
-    </div>
-    <div class="manual">
-      <input id="codigoManual" placeholder="…o pegá el código del QR">
-      <button class="btn" onclick="validarManual()">Validar</button>
-    </div>
-    <div class="hint">Apuntá la cámara al QR de la entrada. Permití el acceso a la cámara.</div>
   </div>
 
 </div>
@@ -172,9 +185,10 @@
     $('loginView').style.display = 'none';
     $('adminView').style.display = 'none';
     $('controlView').style.display = 'none';
-    if(ROL === 'admin'){ $('adminView').style.display = 'block'; cargarResumen(); }
-    else if(ROL === 'venta'){ $('adminView').style.display = 'block'; document.querySelectorAll('.adminonly').forEach(el => el.style.display = 'none'); cargarResumen(); }
-    else if(ROL === 'control'){ $('controlView').style.display = 'block'; iniciarEscaner(); }
+    $('listadoSection').style.display = 'none';
+    if(ROL === 'admin'){ $('adminView').style.display = 'block'; $('listadoSection').style.display = 'block'; cargarResumen(); }
+    else if(ROL === 'venta'){ $('adminView').style.display = 'block'; $('listadoSection').style.display = 'block'; document.querySelectorAll('.adminonly').forEach(el => el.style.display = 'none'); cargarResumen(); }
+    else if(ROL === 'control'){ $('controlView').style.display = 'block'; $('listadoSection').style.display = 'block'; cargarResumen(); }  // la cámara se abre con el botón
     else { $('loginView').style.display = 'block'; }
   }
 
@@ -332,6 +346,22 @@
     if(typeof Html5Qrcode === 'undefined'){ $('scanResult').style.display='block'; $('scanResult').className='result err'; $('scanMsg').textContent='No cargó el lector de QR (revisá internet).'; return; }
     window._scanner = new Html5Qrcode('reader');
     arrancarCamara();
+  }
+  // Abrir la cámara recién al tocar el botón (no automáticamente)
+  function abrirCamara(){
+    if(window._scanner) return;            // ya está abierta
+    $('scanZone').style.display = 'block';
+    $('btnAbrirCam').style.display = 'none';
+    $('reader').style.display = '';
+    $('scanResult').style.display = 'none';
+    iniciarEscaner();
+  }
+  function cerrarCamara(){
+    if(window._scanner){ try{ window._scanner.stop(); }catch(e){} window._scanner = null; }
+    $('scanZone').style.display = 'none';
+    $('btnAbrirCam').style.display = '';
+    $('scanResult').style.display = 'none';
+    pausada = false; procesando = false;
   }
   function onScan(txt){
     if(procesando) return;

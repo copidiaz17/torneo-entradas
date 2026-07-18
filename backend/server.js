@@ -473,7 +473,7 @@ app.post('/api/visita', async (req, res) => {
   }
 })
 
-app.get('/api/admin/resumen', requireAuth(['admin', 'venta']), async (req, res) => {
+app.get('/api/admin/resumen', requireAuth(['admin', 'venta', 'control']), async (req, res) => {
   try {
     // Excluye las órdenes de PRUEBA (metodo='prueba') para no ensuciar el panel.
     const ordenes = await Orden.findAll({ where: { estado: 'pagada', metodo: { [Op.notIn]: ['prueba', 'cortesia'] } }, order: [['createdAt', 'DESC']] })
@@ -484,10 +484,10 @@ app.get('/api/admin/resumen', requireAuth(['admin', 'venta']), async (req, res) 
       cantidad: o.cantidad, total: o.total, fecha: o.createdAt,
     }))
 
-    // El perfil "venta" (control manual en la puerta) solo ve el listado de compradores
-    // para buscar por DNI y mostrar/generar entradas. NO recibe estadísticas:
-    // ni recaudación, ni entradas vendidas, ni visitas. Ni siquiera llegan a su navegador.
-    if (req.usuario.rol === 'venta') {
+    // Los perfiles "venta" y "control" solo ven el listado de compradores (buscar por DNI,
+    // mostrar/reenviar entradas). NO reciben estadísticas: ni recaudación, ni entradas
+    // vendidas, ni visitas. Ni siquiera llegan a su navegador.
+    if (req.usuario.rol === 'venta' || req.usuario.rol === 'control') {
       return res.json({ ordenes: listado })
     }
 
@@ -574,7 +574,7 @@ app.post('/api/admin/entrada-cortesia', requireAuth(['admin']), async (req, res)
 })
 
 // Ver los QR de una orden (admin/venta): para mostrarlos en pantalla y escanearlos en la puerta
-app.get('/api/admin/orden/:id/qrs', requireAuth(['admin', 'venta']), async (req, res) => {
+app.get('/api/admin/orden/:id/qrs', requireAuth(['admin', 'venta', 'control']), async (req, res) => {
   try {
     const orden = await Orden.findByPk(req.params.id)
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' })
@@ -593,7 +593,7 @@ app.get('/api/admin/orden/:id/qrs', requireAuth(['admin', 'venta']), async (req,
 // REENVIAR las entradas por email (admin/venta): para quien puso MAL su email al comprar.
 // Corrige el email guardado en la orden (así queda bien en el listado y en "Mis Entradas")
 // y reenvía los mismos QR al correcto. Regenera los PNG desde el código firmado (disco efímero).
-app.post('/api/admin/orden/:id/reenviar', requireAuth(['admin', 'venta']), async (req, res) => {
+app.post('/api/admin/orden/:id/reenviar', requireAuth(['admin', 'venta', 'control']), async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim()
     if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email inválido' })
