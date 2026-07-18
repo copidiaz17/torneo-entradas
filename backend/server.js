@@ -402,7 +402,7 @@ app.post('/api/mis-entradas', rateLimit({ windowMs: 60000, max: 10, msg: 'Demasi
 
 // 6) VALIDAR entrada en la puerta (escaneo del QR) — verifica firma + UN SOLO USO
 //    Protegido con token de staff en el header X-Scan-Token.
-app.post('/api/validar', rateLimit({ windowMs: 60000, max: 300 }), async (req, res) => {
+app.post('/api/validar', rateLimit({ windowMs: 60000, max: 1200 }), async (req, res) => {
   // Autoriza si trae sesión de control/admin O el token de escaneo por header
   const p = tokenDeReq(req)
   const okAuth = (p && ['control', 'admin'].includes(p.rol)) ||
