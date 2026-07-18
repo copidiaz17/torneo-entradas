@@ -590,6 +590,39 @@ app.get('/api/admin/orden/:id/qrs', requireAuth(['admin', 'venta']), async (req,
   }
 })
 
+// REENVIAR las entradas por email (admin/venta): para quien puso MAL su email al comprar.
+// Corrige el email guardado en la orden (así queda bien en el listado y en "Mis Entradas")
+// y reenvía los mismos QR al correcto. Regenera los PNG desde el código firmado (disco efímero).
+app.post('/api/admin/orden/:id/reenviar', requireAuth(['admin', 'venta']), async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim()
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email inválido' })
+
+    const orden = await Orden.findByPk(req.params.id)
+    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' })
+
+    const entradas = await Entrada.findAll({ where: { orden_id: orden.id }, order: [['indice', 'ASC']] })
+    if (!entradas.length) return res.status(404).json({ error: 'La orden no tiene entradas emitidas' })
+
+    orden.email = email
+    await orden.save()
+
+    const qrs = []
+    for (const e of entradas) {
+      const archivo = join(QR_DIR, `${orden.id}-${e.indice}.png`)
+      await QRCode.toFile(archivo, e.codigo, { width: 420, margin: 1, color: { dark: '#d6006e', light: '#ffffff' } })
+      qrs.push({ orden_id: orden.id, indice: e.indice, codigo: e.codigo, archivo })
+    }
+
+    await enviarMail(orden, qrs)
+    console.log(`📧 Reenvío de entradas: orden ${orden.id} → ${email} (${qrs.length} QR)`)
+    res.json({ ok: true, email, cantidad: qrs.length })
+  } catch (e) {
+    console.error('❌ Error reenviando entradas:', e?.message || e)
+    res.status(500).json({ error: 'No se pudo reenviar el email' })
+  }
+})
+
 // VENTA MANUAL (admin/venta): entrada pagada por transferencia. Cuenta como venta real,
 // aparece en el listado y se envía por email. Solo se pide nombre y email.
 app.post('/api/admin/entrada-manual', requireAuth(['admin', 'venta']), async (req, res) => {

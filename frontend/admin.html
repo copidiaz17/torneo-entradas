@@ -127,7 +127,15 @@
     <div id="qrModalTitulo" style="font-weight:800;color:#d6006e;font-size:17px;margin-bottom:4px;"></div>
     <div id="qrModalSub" style="font-size:13px;color:#777;margin-bottom:14px;"></div>
     <div id="qrModalBody"></div>
-    <button class="btn" style="margin-top:14px;" onclick="cerrarQR()">Cerrar</button>
+    <div style="border-top:1px solid #f3e0ec;margin-top:16px;padding-top:14px;text-align:left;">
+      <div style="font-size:13px;color:#7a5066;margin-bottom:6px;">📧 <b>¿Puso mal el email?</b> Reenviá las entradas al correcto:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="reenvEmail" type="email" placeholder="email correcto" style="flex:1;min-width:200px;">
+        <button class="btn" onclick="reenviarMail()">Reenviar</button>
+      </div>
+      <div id="reenvMsg" style="font-size:13px;margin-top:8px;min-height:18px;"></div>
+    </div>
+    <button class="btn ghost" style="margin-top:14px;" onclick="cerrarQR()">Cerrar</button>
   </div>
 </div>
 
@@ -249,12 +257,16 @@
   }
 
   // ── Mostrar los QR de una compra (para gente que llegó sin su entrada) ──
+  let ordenModalActual = null;
   async function mostrarQR(ordenId){
     try{
       const r = await fetch('/api/admin/orden/' + encodeURIComponent(ordenId) + '/qrs', { headers: auth() });
       if(r.status === 401){ logout(); return; }
       const d = await r.json();
       if(!r.ok) throw new Error(d.error || 'Error');
+      ordenModalActual = ordenId;
+      if($('reenvEmail')){ $('reenvEmail').value = d.email || ''; }
+      if($('reenvMsg')){ $('reenvMsg').textContent = ''; }
       $('qrModalTitulo').textContent = d.nombre + ' — ' + d.cantidad + ' entrada(s)';
       $('qrModalSub').textContent = 'DNI ' + d.dni + ' · ' + d.email + ' · escaneá cada QR en la puerta';
       $('qrModalBody').innerHTML = d.qrs.map(q =>
@@ -266,6 +278,23 @@
     }catch(e){ alert('No se pudieron mostrar los QR: ' + (e.message || '')); }
   }
   function cerrarQR(){ $('qrModal').style.display = 'none'; }
+
+  // ── Reenviar las entradas al email correcto (para quien lo puso mal) ──
+  async function reenviarMail(){
+    const email = ($('reenvEmail').value || '').trim();
+    const msg = $('reenvMsg');
+    if(!email || !email.includes('@')){ msg.style.color = '#b91c1c'; msg.textContent = 'Ingresá un email válido.'; return; }
+    if(!ordenModalActual){ msg.style.color = '#b91c1c'; msg.textContent = 'No hay una compra seleccionada.'; return; }
+    msg.style.color = '#7a5066'; msg.textContent = 'Enviando…';
+    try{
+      const r = await fetch('/api/admin/orden/' + encodeURIComponent(ordenModalActual) + '/reenviar', { method:'POST', headers:{'Content-Type':'application/json', ...auth()}, body: JSON.stringify({ email }) });
+      if(r.status === 401){ logout(); return; }
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'Error');
+      msg.style.color = '#166534'; msg.textContent = '✅ Enviado a ' + d.email + ' (' + d.cantidad + ' entrada/s). Que revise también spam.';
+      cargarResumen(); // refresca el listado con el email ya corregido
+    }catch(e){ msg.style.color = '#b91c1c'; msg.textContent = 'No se pudo reenviar: ' + (e.message || ''); }
+  }
 
   // ── Venta manual: transferencia → genera y envía las entradas, y las registra ──
   async function generarManual(){
